@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Valmentaja">
+<title>Juoksuvalmentaja</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  background: #0a0a0a;
+  color: #f0f0f0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+#lock-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  gap: 16px;
+}
+#lock-screen h1 { font-size: 24px; font-weight: 600; }
+#lock-screen p { font-size: 14px; color: #888; }
+#lock-screen input {
+  width: 100%;
+  max-width: 280px;
+  padding: 14px 16px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 12px;
+  color: #f0f0f0;
+  font-size: 16px;
+  text-align: center;
+  letter-spacing: 0.1em;
+}
+#lock-screen button {
+  width: 100%;
+  max-width: 280px;
+  padding: 14px;
+  background: #f0f0f0;
+  color: #0a0a0a;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+#lock-error { color: #e24b4a; font-size: 13px; display: none; }
+
+#app { flex: 1; display: none; flex-direction: column; height: 100vh; }
+
+#topbar {
+  padding: max(env(safe-area-inset-top), 16px) 16px 12px;
+  background: #0a0a0a;
+  border-bottom: 1px solid #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+#topbar .title { font-size: 17px; font-weight: 600; }
+#topbar .subtitle { font-size: 12px; color: #888; margin-top: 2px; }
+#status-dot { width: 8px; height: 8px; border-radius: 50%; background: #3dcaa5; }
+
+#messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.msg {
+  max-width: 85%;
+  padding: 12px 14px;
+  border-radius: 16px;
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.msg.user {
+  background: #1d4ed8;
+  color: #fff;
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+}
+.msg.coach {
+  background: #1a1a1a;
+  color: #f0f0f0;
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+}
+.msg.system {
+  background: transparent;
+  color: #555;
+  font-size: 12px;
+  align-self: center;
+  text-align: center;
+  padding: 4px 0;
+}
+.typing { display: flex; gap: 4px; align-items: center; padding: 14px; }
+.typing span {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #555; animation: bounce 1.2s infinite;
+}
+.typing span:nth-child(2) { animation-delay: 0.2s; }
+.typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-6px); }
+}
+
+#inputbar {
+  padding: 8px 12px max(env(safe-area-inset-bottom), 8px);
+  background: #0a0a0a;
+  border-top: 1px solid #1a1a1a;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+#user-input {
+  flex: 1;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 20px;
+  padding: 10px 14px;
+  color: #f0f0f0;
+  font-size: 15px;
+  resize: none;
+  max-height: 120px;
+  outline: none;
+  line-height: 1.4;
+}
+#send-btn {
+  width: 36px; height: 36px;
+  background: #f0f0f0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+#send-btn svg { width: 16px; height: 16px; }
+#send-btn:disabled { background: #333; }
+</style>
+</head>
+<body>
+
+<div id="lock-screen">
+  <div>
+    <h1>🏃 Juoksuvalmentaja</h1>
+  </div>
+  <p>Syötä salasana</p>
+  <input type="password" id="pw-input" placeholder="••••" onkeydown="if(event.key==='Enter')unlock()">
+  <button onclick="unlock()">Avaa</button>
+  <span id="lock-error">Väärä salasana</span>
+</div>
+
+<div id="app">
+  <div id="topbar">
+    <div>
+      <div class="title">Juoksuvalmentaja</div>
+      <div class="subtitle" id="context-label">Ladataan dataa...</div>
+    </div>
+    <div id="status-dot"></div>
+  </div>
+  <div id="messages"></div>
+  <div id="inputbar">
+    <textarea id="user-input" placeholder="Kirjoita valmentajalle..." rows="1"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"
+      oninput="autoResize(this)"></textarea>
+    <button id="send-btn" onclick="sendMessage()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"></line>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<script>
+const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
+const SHEETS_API = 'https://script.google.com/macros/s/AKfycbyyBUiF6A3jlbJ3GrbF1lgD1xrBpvW9Zf819v7QRmCXmFwWUXWyYMU63jSMnRVR2kt4/exec';
+const PASSWORD = 'utmb';
+
+let CLAUDE_KEY = '';
+let contextData = {};
+let chatHistory = [];
+
+function unlock() {
+  const pw = document.getElementById('pw-input').value;
+  if (pw !== PASSWORD) {
+    document.getElementById('lock-error').style.display = 'block';
+    return;
+  }
+  const key = prompt('Anna Claude API -avain:');
+  if (!key || !key.startsWith('sk-')) {
+    alert('Virheellinen API-avain');
+    return;
+  }
+  CLAUDE_KEY = key;
+  document.getElementById('lock-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  loadContext();
+}
+
+async function loadContext() {
+  try {
+    const today = getToday();
+    const res = await fetch(SHEETS_API + '?action=read&pvm=' + today);
+    const text = await res.text();
+    try { contextData = JSON.parse(text); } catch(e) { contextData = {}; }
+  } catch(e) { contextData = {}; }
+
+  const label = contextData.valmius
+    ? 'Valmius ' + contextData.valmius + ' · Uni ' + contextData.uni + ' · BB ' + contextData.battery
+    : 'Ei aamukirjausta tänään';
+  document.getElementById('context-label').textContent = label;
+
+  addMessage('coach', 'Hei Tuomas! Olen lukenut tämän päivän tietosi' +
+    (contextData.valmius ? ' — valmius ' + contextData.valmius + ', uni ' + contextData.uni + ', Body Battery ' + contextData.battery + '.' : '.') +
+    '\n\nMiten voin auttaa? Voit kertoa tunnelmistasi, kysyä treenistä tai pyytää päivän ohjelman.');
+}
+
+function buildSystemPrompt() {
+  const today = new Date().toLocaleDateString('fi-FI', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+  let sys = `Olet Tuomaksen henkilökohtainen juoksuvalmentaja. Olet kannustava, asiantunteva ja tunnet Tuomaksen tilanteen hyvin. Vastaat aina suomeksi, lyhyesti ja käytännönläheisesti. Tänään on ${today}.\n\n`;
+
+  if (contextData.valmius) {
+    sys += `TÄMÄN PÄIVÄN PALAUTUMINEN:\n- Harjoitteluvalmius: ${contextData.valmius}/100\n- Unipisteet: ${contextData.uni}/100\n- Body Battery: ${contextData.battery}/100\n\n`;
+  }
+
+  if (contextData.kisat && contextData.kisat.length > 0) {
+    sys += `TULEVAT KISAT:\n`;
+    contextData.kisat.forEach(k => {
+      sys += `- ${k.kisa_nimi} ${k.kisa_pvm} (${k.matka_km}km, tavoite ${k.tavoiteaika})\n`;
+    });
+    sys += '\n';
+  }
+
+  sys += `Ole lyhyt ja suora. Älä toista dataa takaisin ellei kysytä. Keskity käytännön neuvoihin.`;
+  return sys;
+}
+
+async function sendMessage() {
+  const input = document.getElementById('user-input');
+  const text = input.value.trim();
+  if (!text || !CLAUDE_KEY) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('send-btn').disabled = true;
+
+  addMessage('user', text);
+  chatHistory.push({ role: 'user', content: text });
+
+  const typing = addTyping();
+
+  try {
+    const res = await fetch(CLAUDE_API, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': CLAUDE_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-5',
+        max_tokens: 1024,
+        system: buildSystemPrompt(),
+        messages: chatHistory
+      })
+    });
+
+    const data = await res.json();
+    typing.remove();
+
+    if (data.content && data.content[0]) {
+      const reply = data.content[0].text;
+      chatHistory.push({ role: 'assistant', content: reply });
+      addMessage('coach', reply);
+    } else {
+      addMessage('system', 'Virhe: ' + (data.error?.message || 'tuntematon'));
+    }
+  } catch(e) {
+    typing.remove();
+    addMessage('system', 'Yhteysvirhe. Yritä uudelleen.');
+  }
+
+  document.getElementById('send-btn').disabled = false;
+  scrollBottom();
+}
+
+function addMessage(role, text) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.textContent = text;
+  document.getElementById('messages').appendChild(div);
+  scrollBottom();
+  return div;
+}
+
+function addTyping() {
+  const div = document.createElement('div');
+  div.className = 'msg coach';
+  div.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+  document.getElementById('messages').appendChild(div);
+  scrollBottom();
+  return div;
+}
+
+function scrollBottom() {
+  const m = document.getElementById('messages');
+  m.scrollTop = m.scrollHeight;
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function getToday() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+</script>
+</body>
+</html>
